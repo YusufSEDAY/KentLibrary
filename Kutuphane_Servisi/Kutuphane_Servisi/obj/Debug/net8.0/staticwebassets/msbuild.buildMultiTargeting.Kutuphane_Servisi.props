@@ -1,0 +1,3 @@
+﻿<Project>
+  <Import Project="..\build\Kutuphane_Servisi.props" />
+</Project>

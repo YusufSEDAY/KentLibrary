@@ -1,0 +1,2026 @@
+import React, { useState, useEffect } from 'react';
+import { Box, Typography, Tabs, Tab, Paper, Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Stack, Chip, Autocomplete, MenuItem, Alert, CircularProgress, Grid, InputAdornment, Snackbar } from '@mui/material';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import AddIcon from '@mui/icons-material/Add';
+import SearchIcon from '@mui/icons-material/Search';
+import ClearIcon from '@mui/icons-material/Clear';
+import { fetchBooks, getAllUsers, updateUser, deleteUser, registerUser, createBook, updateBook, deleteBook, fetchCategories, createCategory, updateCategory, deleteCategory, getAllBorrowRequests, updateBorrowRequestStatus } from '../api';
+
+const categoryColors = {
+  Roman: '#3a5ba0',
+  Klasik: '#e07a5f',
+  Psikoloji: '#43aa8b',
+  Aşk: '#f76d6d',
+  Distopya: '#6c63ff',
+  'Bilim Kurgu' : '#ffd166',
+  Çocuk: '#f9c74f',
+  Tarih: '#b5838d',
+  Polisiye: '#22223b',
+  Felsefe: '#3d405b',
+  Macera: '#f3722c',
+  Biyografi: '#277da1',
+  Şiir: '#9d4edd',
+  Mitoloji: '#ffb4a2',
+  Korku: '#720026',
+  Mizah: '#f9844a',
+  Sanat: '#577590',
+  Din: '#b5ead7',
+  Bilim: '#00b4d8',
+  Eğitim: '#f7b801',
+  Sağlık: '#43bccd',
+  Spor: '#f94144',
+  Gezi: '#90be6d',
+  Yemek: '#f8961e',
+  Diğer: '#adb5bd',
+};
+
+const emptyBook = { title: '', author: '', summary: '', publishDate: '', pageCount: '', isbn: '', publisher: '', language: '', categories: [], cover: '' };
+const emptyUser = { firstName: '', lastName: '', username: '', email: '', role: 'member', birthDate: '', address: '', publisherName: '', website: '', password: '' };
+
+const AdminPanel = () => {
+  const [tab, setTab] = useState(0);
+  const [books, setBooks] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [openBookDialog, setOpenBookDialog] = useState(false);
+  const [editBook, setEditBook] = useState(null);
+  const [bookForm, setBookForm] = useState(emptyBook);
+  const [openUserDialog, setOpenUserDialog] = useState(false);
+  const [editUser, setEditUser] = useState(null);
+  const [userForm, setUserForm] = useState(emptyUser);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filteredUsers, setFilteredUsers] = useState([]);
+  const [filteredBooks, setFilteredBooks] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [filteredCategories, setFilteredCategories] = useState([]);
+  const [openCategoryDialog, setOpenCategoryDialog] = useState(false);
+  const [editCategory, setEditCategory] = useState(null);
+  const [categoryForm, setCategoryForm] = useState({ name: '' });
+  const [borrowRequests, setBorrowRequests] = useState([]);
+  const [filteredBorrowRequests, setFilteredBorrowRequests] = useState([]);
+
+  const [showMoreBooks, setShowMoreBooks] = useState(false);
+  const [showMoreUsers, setShowMoreUsers] = useState(false);
+  const [showMoreCategories, setShowMoreCategories] = useState(false);
+  const [showMoreBorrowRequests, setShowMoreBorrowRequests] = useState(false);
+
+  const ITEMS_PER_PAGE = 5;
+
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarSeverity, setSnackbarSeverity] = useState('info');
+
+  const handleSearch = (searchValue) => {
+  const handleSearch = (searchValue) => {
+    setSearchTerm(searchValue);
+    
+    if (!searchValue.trim()) {
+      setFilteredUsers(users);
+      setFilteredBooks(books);
+      setFilteredCategories(categories);
+      return;
+    }
+
+    const lowerSearch = searchValue.toLowerCase();
+
+    const filteredUsersResult = users.filter(user => {
+      const fullName = `${user.firstName} ${user.lastName}`.toLowerCase();
+      const username = user.username.toLowerCase();
+      const email = user.email.toLowerCase();
+      const publisherName = (user.publisherName || '').toLowerCase();
+      const website = (user.website || '').toLowerCase();
+      
+      return fullName.includes(lowerSearch) || 
+             username.includes(lowerSearch) || 
+             email.includes(lowerSearch) ||
+             publisherName.includes(lowerSearch) ||
+             website.includes(lowerSearch);
+    });
+
+    const filteredBooksResult = books.filter(book => {
+      const title = book.title.toLowerCase();
+      const author = book.author.toLowerCase();
+      const publisher = (book.publisher || '').toLowerCase();
+      const isbn = (book.isbn || book.ISBN || '').toLowerCase();
+      
+      return title.includes(lowerSearch) || 
+             author.includes(lowerSearch) || 
+             publisher.includes(lowerSearch) ||
+             isbn.includes(lowerSearch);
+    });
+
+    const filteredCategoriesResult = categories.filter(category => {
+      const name = category.name.toLowerCase();
+      const id = category.id.toString().toLowerCase();
+      
+      return name.includes(lowerSearch) || id.includes(lowerSearch);
+    });
+
+    const filteredBorrowRequestsResult = borrowRequests.filter(request => {
+      const bookTitle = (request.bookTitle || '').toLowerCase();
+      const userName = (request.userName || '').toLowerCase();
+      const status = (request.status || '').toLowerCase();
+      const publisherName = (request.publisherName || '').toLowerCase();
+      
+      return bookTitle.includes(lowerSearch) || 
+             userName.includes(lowerSearch) || 
+             status.includes(lowerSearch) ||
+             publisherName.includes(lowerSearch);
+    });
+
+    setFilteredUsers(filteredUsersResult);
+    setFilteredBooks(filteredBooksResult);
+    setFilteredCategories(filteredCategoriesResult);
+    setFilteredBorrowRequests(filteredBorrowRequestsResult);
+  };
+
+  const clearSearch = () => {
+    setSearchTerm('');
+    setFilteredUsers(users);
+    setFilteredBooks(books);
+    setFilteredCategories(categories);
+    setFilteredBorrowRequests(borrowRequests);
+  };
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        const [booksResponse, usersResponse, categoriesResponse, borrowRequestsResponse] = await Promise.all([
+          fetchBooks(),
+          getAllUsers(),
+          fetchCategories(),
+          getAllBorrowRequests()
+        ]);
+        setBooks(booksResponse.data);
+        setUsers(usersResponse.data);
+        setCategories(categoriesResponse.data);
+        setBorrowRequests(borrowRequestsResponse.data);
+        setFilteredUsers(usersResponse.data);
+        setFilteredBooks(booksResponse.data);
+        setFilteredCategories(categoriesResponse.data);
+        setFilteredBorrowRequests(borrowRequestsResponse.data);
+        setError(null);
+      } catch (err) {
+        setError('Veriler yüklenirken hata oluştu: ' + err.message);
+        console.error('Veri yükleme hatası:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, []);
+
+  const handleBookSave = async () => {
+    try {
+      const bookData = {
+        title: bookForm.title,
+        author: bookForm.author,
+        summary: bookForm.summary || 'Özet bilgisi girilmemiş.',
+        publishDate: bookForm.publishDate,
+        pageCount: parseInt(bookForm.pageCount) || 0,
+        ISBN: bookForm.isbn,
+        publisher: bookForm.publisher,
+        language: bookForm.language,
+        cover: bookForm.cover || '',
+        categoryIDs: bookForm.categories && bookForm.categories.length > 0 ? 
+          bookForm.categories.map(cat => {
+            // Kategori adından ID bul
+            const category = categories.find(c => c.name === cat);
+            return category ? category.id : null;
+          }).filter(id => id !== null) : []
+      };
+      
+      if (editBook) {
+        // Kitap güncelleme
+        await updateBook(editBook.id || editBook.ID, bookData);
+      } else {
+        const response = await createBook(bookData);
+      }
+      
+      setOpenBookDialog(false);
+      setEditBook(null);
+      setBookForm(emptyBook);
+      
+      setSnackbarMessage(editBook ? 'Kitap başarıyla güncellendi!' : 'Kitap başarıyla eklendi!');
+      setSnackbarSeverity('success');
+      setSnackbarOpen(true);
+      
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
+      
+    } catch (err) {
+      console.error('Kitap işlemi hatası detayları:', {
+        message: err.message,
+        response: err.response,
+        status: err.response?.status,
+        data: err.response?.data,
+        config: err.config
+      });
+      
+      let errorMessage = 'Kitap işlemi sırasında hata oluştu: ';
+      if (err.response?.data) {
+        if (typeof err.response.data === 'object') {
+          errorMessage += JSON.stringify(err.response.data);
+        } else {
+          errorMessage += err.response.data;
+        }
+      } else if (err.message) {
+        errorMessage += err.message;
+      } else {
+        errorMessage += 'Bilinmeyen hata';
+      }
+      
+      setSnackbarMessage(errorMessage);
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+    }
+  };
+  
+  const handleBookDelete = async (id) => {
+    try {
+      const response = await deleteBook(id);
+      
+      setSnackbarMessage('Kitap başarıyla silindi!');
+      setSnackbarSeverity('success');
+      setSnackbarOpen(true);
+      
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
+      
+    } catch (err) {
+      console.error('Kitap silme hatası detayları:', {
+        message: err.message,
+        response: err.response,
+        status: err.response?.status,
+        data: err.response?.data,
+        config: err.config
+      });
+      
+      let errorMessage = 'Kitap silinirken hata oluştu: ';
+      if (err.response?.data) {
+        errorMessage += err.response.data;
+      } else if (err.message) {
+        errorMessage += err.message;
+      } else {
+        errorMessage += 'Bilinmeyen hata';
+      }
+      
+      setSnackbarMessage(errorMessage);
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+    }
+  };
+  const handleBookEdit = (book) => {
+    setEditBook(book);
+    setBookForm({
+      title: book.title,
+      author: book.author,
+      summary: book.summary || '',
+      publishDate: book.publishDate,
+      pageCount: book.pageCount,
+      isbn: book.ISBN || book.isbn,
+      publisher: book.publisher,
+      language: book.language,
+      categories: book.categories || [],
+      cover: book.cover || '',
+    });
+    setOpenBookDialog(true);
+  };
+
+  // Kullanıcı ekle/güncelle (API ile)
+  const handleUserSave = async () => {
+    try {
+    if (editUser) {
+        await updateUser(editUser.id, userForm);
+        const updatedUsers = users.map(u => u.id === editUser.id ? { ...u, ...userForm } : u);
+        setUsers(updatedUsers);
+    } else {
+        const response = await registerUser(userForm);
+        const newUser = response.data;
+        setUsers([...users, newUser]);
+    }
+    setOpenUserDialog(false);
+    setEditUser(null);
+    setUserForm(emptyUser);
+    
+    setSnackbarMessage(editUser ? 'Kullanıcı başarıyla güncellendi!' : 'Kullanıcı başarıyla eklendi!');
+    setSnackbarSeverity('success');
+    setSnackbarOpen(true);
+    
+    setTimeout(() => {
+      window.location.reload();
+    }, 500);
+    } catch (err) {
+      console.error('Kullanıcı işlemi hatası detayları:', {
+        message: err.message,
+        response: err.response,
+        status: err.response?.status,
+        data: err.response?.data
+      });
+      
+      let errorMessage = 'Kullanıcı işlemi sırasında hata oluştu: ';
+      if (err.response?.data) {
+        if (typeof err.response.data === 'object') {
+          errorMessage += JSON.stringify(err.response.data);
+        } else {
+          errorMessage += err.response.data;
+        }
+      } else if (err.message) {
+        errorMessage += err.message;
+      } else {
+        errorMessage += 'Bilinmeyen hata';
+      }
+      
+      setSnackbarMessage(errorMessage);
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+    }
+  };
+
+  const handleUserDelete = async (id) => {
+    try {
+      await deleteUser(id);
+      
+      // Başarı mesajı
+      setSnackbarMessage('Kullanıcı başarıyla silindi!');
+      setSnackbarSeverity('success');
+      setSnackbarOpen(true);
+      
+      // Sayfayı yenile
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
+      
+    } catch (err) {
+      console.error('Kullanıcı silme hatası detayları:', {
+        message: err.message,
+        response: err.response,
+        status: err.response?.status,
+        data: err.response?.data
+      });
+      
+      let errorMessage = 'Kullanıcı silinirken hata oluştu: ';
+      if (err.response?.data) {
+        if (typeof err.response.data === 'object') {
+          errorMessage += JSON.stringify(err.response.data);
+        } else {
+          errorMessage += err.response.data;
+        }
+      } else if (err.message) {
+        errorMessage += err.message;
+      } else {
+        errorMessage += 'Bilinmeyen hata';
+      }
+      
+      setSnackbarMessage(errorMessage);
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+    }
+  };
+  // Kullanıcı düzenle
+  const handleUserEdit = (user) => {
+    setEditUser(user);
+    setUserForm({
+      firstName: user.firstName || '',
+      lastName: user.lastName || '',
+      username: user.username || '',
+      email: user.email || '',
+      role: user.role || 'member',
+      birthDate: user.birthDate || '',
+      address: user.address || '',
+      publisherName: user.publisherName || '',
+      website: user.website || '',
+      password: '' // Şifre güvenlik nedeniyle boş bırakılır
+    });
+    setOpenUserDialog(true);
+  };
+
+  // Kategori ekle/güncelle
+  const handleCategorySave = async () => {
+    try {
+      if (editCategory) {
+        // Kategori güncelleme
+        await updateCategory(editCategory.id, categoryForm);
+      } else {
+        // Yeni kategori ekleme
+        const response = await createCategory(categoryForm);
+      }
+      
+      setOpenCategoryDialog(false);
+      setEditCategory(null);
+      setCategoryForm({ name: '' });
+      
+      // Başarı mesajı
+      setSnackbarMessage(editCategory ? 'Kategori başarıyla güncellendi!' : 'Kategori başarıyla eklendi!');
+      setSnackbarSeverity('success');
+      setSnackbarOpen(true);
+      
+      // Sayfayı yenile
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
+      
+    } catch (err) {
+      console.error('Kategori işlemi hatası detayları:', {
+        message: err.message,
+        response: err.response,
+        status: err.response?.status,
+        data: err.response?.data
+      });
+      
+      let errorMessage = 'Kategori işlemi sırasında hata oluştu: ';
+      if (err.response?.data) {
+        errorMessage += err.response.data;
+      } else if (err.message) {
+        errorMessage += err.message;
+      } else {
+        errorMessage += 'Bilinmeyen hata';
+      }
+      
+      setSnackbarMessage(errorMessage);
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+    }
+  };
+
+  // Kategori sil
+  const handleCategoryDelete = async (id) => {
+    try {
+      await deleteCategory(id);
+      
+      // Başarı mesajı
+      setSnackbarMessage('Kategori başarıyla silindi!');
+      setSnackbarSeverity('success');
+      setSnackbarOpen(true);
+      
+      // Sayfayı yenile
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
+      
+    } catch (err) {
+      console.error('Kategori silme hatası detayları:', {
+        message: err.message,
+        response: err.response,
+        status: err.response?.status,
+        data: err.response?.data
+      });
+      
+      let errorMessage = 'Kategori silinirken hata oluştu: ';
+      if (err.response?.data) {
+        errorMessage += err.response.data;
+      } else if (err.message) {
+        errorMessage += err.message;
+      } else {
+        errorMessage += 'Bilinmeyen hata';
+      }
+      
+      setSnackbarMessage(errorMessage);
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+    }
+  };
+
+  // Kategori düzenle
+  const handleCategoryEdit = (category) => {
+    setEditCategory(category);
+    setCategoryForm({
+      name: category.name || ''
+    });
+    setOpenCategoryDialog(true);
+  };
+
+  // Ödünç talebi onayla
+  const handleApproveRequest = async (requestId) => {
+    try {
+      await updateBorrowRequestStatus(requestId, { status: 'Approved' });
+      
+      // Başarı mesajı
+      setSnackbarMessage('Ödünç alma talebi başarıyla onaylandı!');
+      setSnackbarSeverity('success');
+      setSnackbarOpen(true);
+      
+      // Sayfayı yenile
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
+      
+    } catch (err) {
+      console.error('Talep onaylama hatası detayları:', {
+        message: err.message,
+        response: err.response,
+        status: err.response?.status,
+        data: err.response?.data
+      });
+      
+      let errorMessage = 'Talep onaylanırken hata oluştu: ';
+      if (err.response?.data) {
+        if (typeof err.response.data === 'object') {
+          errorMessage += JSON.stringify(err.response.data);
+        } else {
+          errorMessage += err.response.data;
+        }
+      } else if (err.message) {
+        errorMessage += err.message;
+      } else {
+        errorMessage += 'Bilinmeyen hata';
+      }
+      
+      setSnackbarMessage(errorMessage);
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+    }
+  };
+
+  // Ödünç talebi reddet
+  const handleRejectRequest = async (requestId) => {
+    try {
+      await updateBorrowRequestStatus(requestId, { status: 'Rejected' });
+      
+      // Başarı mesajı
+      setSnackbarMessage('Ödünç alma talebi başarıyla reddedildi!');
+      setSnackbarSeverity('warning');
+      setSnackbarOpen(true);
+      
+      // Sayfayı yenile
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
+      
+    } catch (err) {
+      console.error('Talep reddetme hatası detayları:', {
+        message: err.message,
+        response: err.response,
+        status: err.response?.status,
+        data: err.response?.data
+      });
+      
+      let errorMessage = 'Talep reddedilirken hata oluştu: ';
+      if (err.response?.data) {
+        if (typeof err.response.data === 'object') {
+          errorMessage += JSON.stringify(err.response.data);
+        } else {
+          errorMessage += err.response.data;
+        }
+      } else if (err.message) {
+        errorMessage += err.message;
+      } else {
+        errorMessage += 'Bilinmeyen hata';
+      }
+      
+      setSnackbarMessage(errorMessage);
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+    }
+  };
+
+  // Tarih formatla
+  const formatDate = (dateString) => {
+    if (!dateString) return '-';
+    return new Date(dateString).toLocaleDateString('tr-TR');
+  };
+
+  const handleTabChange = (event, newValue) => {
+    setTab(newValue);
+    clearSearch();
+    // Tab değiştiğinde "Daha Fazla Göster" state'lerini sıfırla
+    setShowMoreBooks(false);
+    setShowMoreUsers(false);
+    setShowMoreCategories(false);
+    setShowMoreBorrowRequests(false);
+  };
+
+  return (
+    <Box sx={{ p: { xs: 1, sm: 3 }, maxWidth: 1200, mx: 'auto', mt: 4 }}>
+      <Paper sx={{ p: { xs: 2, sm: 4 }, borderRadius: 4, boxShadow: 6 }}>
+        <Typography variant="h4" gutterBottom align="center">Admin Paneli</Typography>
+        
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
+        
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+            <CircularProgress />
+          </Box>
+        ) : (
+          <>
+            <Tabs value={tab} onChange={handleTabChange} centered sx={{ mb: 3 }}>
+          <Tab label="Kitaplar" />
+          <Tab label="Kullanıcılar" />
+              <Tab label="Kategoriler" />
+              <Tab label="Ödünç Talepleri" />
+        </Tabs>
+        {/* Kitaplar Sekmesi */}
+        {tab === 0 && (
+          <>
+            {/* Kitaplar Arama Kutusu */}
+            <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 2, justifyContent: 'space-between' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexGrow: 1, maxWidth: 400 }}>
+                <TextField
+                  placeholder="Kitap başlığı, yazar veya yayınevi ara..."
+                  value={searchTerm}
+                  onChange={(e) => handleSearch(e.target.value)}
+                  sx={{
+                    flexGrow: 1,
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: 3,
+                      backgroundColor: '#ffffff',
+                      boxShadow: 'none',
+                      border: '1px solid #e0e0e0',
+                      transition: 'all 0.3s ease',
+                      '&:hover': {
+                        backgroundColor: '#ffffff',
+                        border: '1px solid #d0d0d0',
+                        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)'
+                      },
+                      '&.Mui-focused': {
+                        backgroundColor: '#ffffff',
+                        border: '1px solid #2e7d32',
+                        boxShadow: '0 1px 3px rgba(46, 125, 50, 0.1)'
+                      }
+                    },
+                    '& .MuiInputLabel-root': {
+                      fontWeight: 400,
+                      color: '#666'
+                    }
+                  }}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon sx={{ color: '#777' }} />
+                      </InputAdornment>
+                    ),
+                    endAdornment: searchTerm && (
+                      <InputAdornment position="end">
+                        <IconButton
+                          size="small"
+                          onClick={clearSearch}
+                          sx={{ color: '#777' }}
+                        >
+                          <ClearIcon />
+                        </IconButton>
+                      </InputAdornment>
+                    )
+                  }}
+                />
+                {searchTerm && (
+                  <Typography variant="body2" sx={{ color: '#666', fontWeight: 400, whiteSpace: 'nowrap' }}>
+                    {filteredBooks.length} kitap bulundu
+                  </Typography>
+                )}
+              </Box>
+              <Button 
+                variant="contained" 
+                startIcon={<AddIcon />} 
+                onClick={() => { setEditBook(null); setBookForm(emptyBook); setOpenBookDialog(true); }}
+                sx={{ 
+                  backgroundColor: '#2e7d32',
+                  borderRadius: 3,
+                  px: 4,
+                  py: 1.5,
+                  fontSize: 16,
+                  fontWeight: 600,
+                  textTransform: 'none',
+                  boxShadow: '0 4px 12px rgba(46, 125, 50, 0.3)',
+                  '&:hover': { 
+                    backgroundColor: '#1b5e20',
+                    boxShadow: '0 6px 16px rgba(46, 125, 50, 0.4)',
+                    transform: 'translateY(-2px)'
+                  },
+                  transition: 'all 0.3s ease'
+                }}
+              >
+                📚 Kitap Ekle
+              </Button>
+            </Box>
+            <TableContainer component={Paper} sx={{ boxShadow: 2 }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Başlık</TableCell>
+                    <TableCell>Yazar</TableCell>
+                    <TableCell>Yayın Tarihi</TableCell>
+                    <TableCell>Sayfa</TableCell>
+                    <TableCell>ISBN</TableCell>
+                    <TableCell>Yayınevi</TableCell>
+                    <TableCell>Dil</TableCell>
+                    <TableCell>Kapak</TableCell>
+                    <TableCell>Kategoriler</TableCell>
+                    <TableCell align="right">İşlemler</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {filteredBooks
+                    .slice(0, showMoreBooks ? filteredBooks.length : ITEMS_PER_PAGE)
+                    .map(book => (
+                    <TableRow key={book.ID}>
+                      <TableCell>{book.title}</TableCell>
+                      <TableCell>{book.author}</TableCell>
+                      <TableCell>{new Date(book.publishDate).toLocaleDateString('tr-TR')}</TableCell>
+                      <TableCell>{book.pageCount}</TableCell>
+                      <TableCell>{book.isbn || book.ISBN}</TableCell>
+                      <TableCell>{book.publisher}</TableCell>
+                      <TableCell>{book.language}</TableCell>
+                      <TableCell>
+                        {book.cover && (
+                          <img src={book.cover} alt="kapak" style={{ width: 40, height: 56, objectFit: 'contain', borderRadius: 4, boxShadow: '0 2px 8px #3a5ba022' }} />
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
+                          {book.categories && book.categories.map(cat => (
+                            <Chip key={cat} label={cat} size="small" sx={{ 
+                              fontWeight: 600, 
+                              fontSize: 13, 
+                              background: categoryColors[cat] || '#4ecdc4', 
+                              color: '#fff', 
+                              letterSpacing: '0.03em' 
+                            }} />
+                          ))}
+                        </Stack>
+                      </TableCell>
+                      <TableCell align="right">
+                        <IconButton color="info" onClick={() => handleBookEdit(book)}><EditIcon /></IconButton>
+                        <IconButton color="error" onClick={() => handleBookDelete(book.id || book.ID)}><DeleteIcon /></IconButton>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+            
+            {/* Daha Fazla Göster Butonu - Kitaplar */}
+            {filteredBooks.length > ITEMS_PER_PAGE && (
+              <Box sx={{ mt: 2, textAlign: 'center' }}>
+                <Button
+                  variant="outlined"
+                  onClick={() => setShowMoreBooks(!showMoreBooks)}
+                  sx={{
+                    borderRadius: 3,
+                    px: 4,
+                    py: 1.5,
+                    fontWeight: 600,
+                    borderColor: '#3a5ba0',
+                    color: '#fff',
+                    backgroundColor: '#3a5ba0',
+                    '&:hover': {
+                      borderColor: '#2c4a8a',
+                      backgroundColor: '#2c4a8a',
+                      transform: 'translateY(-1px)',
+                      boxShadow: '0 4px 12px rgba(58, 91, 160, 0.15)'
+                    },
+                    transition: 'all 0.3s ease'
+                  }}
+                >
+                  {showMoreBooks ? 'Daha Az Göster' : 'Daha Fazla Göster'}
+                </Button>
+              </Box>
+            )}
+            {/* Kitap Ekle/Güncelle Dialog */}
+            <Dialog open={openBookDialog} onClose={() => setOpenBookDialog(false)}>
+              <DialogTitle>{editBook ? 'Kitap Güncelle' : 'Kitap Ekle'}</DialogTitle>
+              <DialogContent>
+                <Stack spacing={2} sx={{ mt: 1 }}>
+                  <TextField label="Başlık" value={bookForm.title} onChange={e => setBookForm(f => ({ ...f, title: e.target.value }))} fullWidth required={!editBook} />
+                  <TextField label="Yazar" value={bookForm.author} onChange={e => setBookForm(f => ({ ...f, author: e.target.value }))} fullWidth required={!editBook} />
+                  <TextField 
+                    label="Özet" 
+                    value={bookForm.summary || ''} 
+                    onChange={e => setBookForm(f => ({ ...f, summary: e.target.value }))} 
+                    fullWidth 
+                    multiline 
+                    rows={3}
+                    placeholder="Kitabın kısa özetini yazın..."
+                  />
+                  <TextField 
+                    label="Yayın Tarihi" 
+                    type="date" 
+                    value={bookForm.publishDate ? new Date(bookForm.publishDate).toISOString().split('T')[0] : ''} 
+                    onChange={e => setBookForm(f => ({ ...f, publishDate: e.target.value }))} 
+                    fullWidth 
+                    required={!editBook} 
+                    InputLabelProps={{ shrink: true }}
+                  />
+                  <TextField label="Sayfa Sayısı" type="number" value={bookForm.pageCount} onChange={e => setBookForm(f => ({ ...f, pageCount: parseInt(e.target.value) }))} fullWidth required={!editBook} />
+                  <TextField label="ISBN" value={bookForm.isbn} onChange={e => setBookForm(f => ({ ...f, isbn: e.target.value }))} fullWidth required={!editBook} />
+                  <TextField label="Yayınevi" value={bookForm.publisher} onChange={e => setBookForm(f => ({ ...f, publisher: e.target.value }))} fullWidth required={!editBook} />
+                  <TextField label="Dil" value={bookForm.language} onChange={e => setBookForm(f => ({ ...f, language: e.target.value }))} fullWidth required={!editBook} />
+                  <TextField label="Kapak URL" value={bookForm.cover || ''} onChange={e => setBookForm(f => ({ ...f, cover: e.target.value }))} fullWidth placeholder="https://..." />
+                  <Autocomplete
+                    multiple
+                    options={categories.map(cat => cat.name)}
+                    value={bookForm.categories}
+                    onChange={(_, newValue) => setBookForm(f => ({ ...f, categories: newValue }))}
+                    renderInput={(params) => <TextField {...params} label="Kategoriler" placeholder="Kategori seç" />}
+                    fullWidth
+                  />
+                </Stack>
+              </DialogContent>
+              <DialogActions>
+                <Button onClick={() => setOpenBookDialog(false)}>İptal</Button>
+                <Button onClick={handleBookSave} variant="contained">Kaydet</Button>
+              </DialogActions>
+            </Dialog>
+          </>
+        )}
+        {/* Kullanıcılar Sekmesi */}
+        {tab === 1 && (
+          <>
+            {/* Kullanıcılar Arama Kutusu */}
+            <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 2, justifyContent: 'space-between' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexGrow: 1, maxWidth: 400 }}>
+                <TextField
+                  placeholder="Kullanıcı adı, e-posta veya yayınevi ara..."
+                  value={searchTerm}
+                  onChange={(e) => handleSearch(e.target.value)}
+                  sx={{
+                    flexGrow: 1,
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: 3,
+                      backgroundColor: '#ffffff',
+                      boxShadow: 'none',
+                      border: '1px solid #e0e0e0',
+                      transition: 'all 0.3s ease',
+                      '&:hover': {
+                        backgroundColor: '#ffffff',
+                        border: '1px solid #d0d0d0',
+                        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)'
+                      },
+                      '&.Mui-focused': {
+                        backgroundColor: '#ffffff',
+                        border: '1px solid #1976d2',
+                        boxShadow: '0 1px 3px rgba(25, 118, 210, 0.1)'
+                      }
+                    },
+                    '& .MuiInputLabel-root': {
+                      fontWeight: 400,
+                      color: '#666'
+                    }
+                  }}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon sx={{ color: '#777' }} />
+                      </InputAdornment>
+                    ),
+                    endAdornment: searchTerm && (
+                      <InputAdornment position="end">
+                        <IconButton
+                          size="small"
+                          onClick={clearSearch}
+                          sx={{ color: '#777' }}
+                        >
+                          <ClearIcon />
+                        </IconButton>
+                      </InputAdornment>
+                    )
+                  }}
+                />
+                {searchTerm && (
+                  <Typography variant="body2" sx={{ color: '#666', fontWeight: 400, whiteSpace: 'nowrap' }}>
+                    {filteredUsers.length} kullanıcı bulundu
+                  </Typography>
+                )}
+              </Box>
+              <Button 
+                variant="contained" 
+                startIcon={<AddIcon />} 
+                onClick={() => { 
+                  setEditUser(null); 
+                  setUserForm({ ...emptyUser, role: 'member' }); 
+                  setOpenUserDialog(true); 
+                }}
+                sx={{ 
+                  backgroundColor: '#1976d2',
+                  borderRadius: 3,
+                  px: 4,
+                  py: 1.5,
+                  fontSize: 16,
+                  fontWeight: 600,
+                  textTransform: 'none',
+                  boxShadow: '0 4px 12px rgba(25, 118, 210, 0.3)',
+                  '&:hover': { 
+                    backgroundColor: '#1565c0',
+                    boxShadow: '0 6px 16px rgba(25, 118, 210, 0.4)',
+                    transform: 'translateY(-2px)'
+                  },
+                  transition: 'all 0.3s ease'
+                }}
+              >
+                👤 Üye Ekle
+              </Button>
+            </Box>
+            
+            {/* Üyeler Bölümü */}
+            <Paper sx={{ p: 3, mb: 3, borderRadius: 3, boxShadow: 3 }}>
+              <Typography variant="h6" gutterBottom sx={{ color: '#1976d2', fontWeight: 600, mb: 2 }}>
+                📚 Üyeler ({filteredUsers.filter(u => u.role === 'member').length})
+              </Typography>
+              <TableContainer component={Paper} sx={{ boxShadow: 1 }}>
+              <Table size="small">
+                <TableHead>
+                    <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
+                      <TableCell sx={{ fontWeight: 600 }}>Ad</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Soyad</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Kullanıcı Adı</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>E-posta</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Kayıt Tarihi</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 600 }}>İşlemler</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                    {filteredUsers
+                      .filter(user => user.role === 'member')
+                      .slice(0, showMoreUsers ? filteredUsers.filter(u => u.role === 'member').length : ITEMS_PER_PAGE)
+                      .map(user => (
+                      <TableRow key={user.id} sx={{ '&:hover': { backgroundColor: '#f8f9fa' } }}>
+                        <TableCell>{user.firstName}</TableCell>
+                        <TableCell>{user.lastName}</TableCell>
+                      <TableCell>{user.username}</TableCell>
+                      <TableCell>{user.email}</TableCell>
+                        <TableCell>{new Date(user.createdAt).toLocaleDateString('tr-TR')}</TableCell>
+                      <TableCell align="right">
+                          <IconButton color="info" onClick={() => handleUserEdit(user)} size="small"><EditIcon /></IconButton>
+                          <IconButton color="error" onClick={() => handleUserDelete(user.id)} size="small"><DeleteIcon /></IconButton>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+            
+            {/* Daha Fazla Göster Butonu - Üyeler */}
+            {filteredUsers.filter(u => u.role === 'member').length > ITEMS_PER_PAGE && (
+              <Box sx={{ mt: 2, textAlign: 'center' }}>
+                <Button
+                  variant="outlined"
+                  onClick={() => setShowMoreUsers(!showMoreUsers)}
+                  sx={{
+                    borderRadius: 3,
+                    px: 4,
+                    py: 1.5,
+                    fontWeight: 600,
+                    borderColor: '#1976d2',
+                    color: '#fff',
+                    backgroundColor: '#1976d2',
+                    '&:hover': {
+                      borderColor: '#1565c0',
+                      backgroundColor: '#1565c0',
+                      transform: 'translateY(-1px)',
+                      boxShadow: '0 4px 12px rgba(25, 118, 210, 0.15)'
+                    },
+                    transition: 'all 0.3s ease'
+                  }}
+                >
+                  {showMoreUsers ? 'Daha Az Göster' : 'Daha Fazla Göster'}
+                </Button>
+              </Box>
+            )}
+            </Paper>
+
+            {/* Yayınevi Ekleme Butonu */}
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 3 }}>
+              <Button 
+                variant="contained" 
+                startIcon={<AddIcon />} 
+                onClick={() => { 
+                  setEditUser(null); 
+                  setUserForm({ ...emptyUser, role: 'publisher' }); 
+                  setOpenUserDialog(true); 
+                }}
+                sx={{ 
+                  backgroundColor: '#ed6c02',
+                  borderRadius: 3,
+                  px: 4,
+                  py: 1.5,
+                  fontSize: 16,
+                  fontWeight: 600,
+                  textTransform: 'none',
+                  boxShadow: '0 4px 12px rgba(237, 108, 2, 0.3)',
+                  '&:hover': { 
+                    backgroundColor: '#d84315',
+                    boxShadow: '0 6px 16px rgba(237, 108, 2, 0.4)',
+                    transform: 'translateY(-2px)'
+                  },
+                  transition: 'all 0.3s ease'
+                }}
+              >
+                🏢 Yayınevi Ekle
+              </Button>
+            </Box>
+
+            {/* Yayınevleri Bölümü */}
+            <Paper sx={{ p: 3, mb: 3, borderRadius: 3, boxShadow: 3 }}>
+              <Typography variant="h6" gutterBottom sx={{ color: '#ed6c02', fontWeight: 600, mb: 2 }}>
+                🏢 Yayınevleri ({filteredUsers.filter(u => u.role === 'publisher').length})
+              </Typography>
+              <TableContainer component={Paper} sx={{ boxShadow: 1 }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow sx={{ backgroundColor: '#fff3e0' }}>
+                      <TableCell sx={{ fontWeight: 600 }}>Yayınevi Adı</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Yetkili Kişi</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Kullanıcı Adı</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>E-posta</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Website</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Kayıt Tarihi</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 600 }}>İşlemler</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {filteredUsers.filter(user => user.role === 'publisher')
+                      .slice(0, showMoreUsers ? filteredUsers.filter(u => u.role === 'publisher').length : ITEMS_PER_PAGE)
+                      .map(user => (
+                      <TableRow key={user.id} sx={{ '&:hover': { backgroundColor: '#fff8e1' } }}>
+                        <TableCell sx={{ fontWeight: 500 }}>{user.publisherName || '-'}</TableCell>
+                        <TableCell>{user.firstName} {user.lastName}</TableCell>
+                        <TableCell>{user.username}</TableCell>
+                        <TableCell>{user.email}</TableCell>
+                        <TableCell>
+                          {user.website ? (
+                            <a href={user.website} target="_blank" rel="noopener noreferrer" style={{ color: '#1976d2', textDecoration: 'none' }}>
+                              {user.website}
+                            </a>
+                          ) : '-'}
+                        </TableCell>
+                        <TableCell>{new Date(user.createdAt).toLocaleDateString('tr-TR')}</TableCell>
+                        <TableCell align="right">
+                          <IconButton color="info" onClick={() => handleUserEdit(user)} size="small"><EditIcon /></IconButton>
+                          <IconButton color="error" onClick={() => handleUserDelete(user.id)} size="small"><DeleteIcon /></IconButton>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              
+              {/* Daha Fazla Göster Butonu - Yayınevleri */}
+              {filteredUsers.filter(u => u.role === 'publisher').length > ITEMS_PER_PAGE && (
+                <Box sx={{ mt: 2, textAlign: 'center' }}>
+                  <Button
+                    variant="outlined"
+                    onClick={() => setShowMoreUsers(!showMoreUsers)}
+                    sx={{
+                      borderRadius: 3,
+                      px: 4,
+                      py: 1.5,
+                      fontWeight: 600,
+                      borderColor: '#ed6c02',
+                      color: '#fff',
+                      backgroundColor: '#ed6c02',
+                      '&:hover': {
+                        borderColor: '#d84315',
+                        backgroundColor: '#d84315',
+                        transform: 'translateY(-1px)',
+                        boxShadow: '0 4px 12px rgba(237, 108, 2, 0.15)'
+                      },
+                      transition: 'all 0.3s ease'
+                    }}
+                  >
+                    {showMoreUsers ? 'Daha Az Göster' : 'Daha Fazla Göster'}
+                  </Button>
+                </Box>
+              )}
+            </Paper>
+            {/* Kullanıcı Ekle/Güncelle Dialog */}
+            <Dialog 
+              open={openUserDialog} 
+              onClose={() => setOpenUserDialog(false)} 
+              maxWidth="md" 
+                    fullWidth
+              PaperProps={{
+                sx: {
+                  borderRadius: 4,
+                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12)',
+                  overflow: 'hidden'
+                }
+              }}
+            >
+              <DialogTitle sx={{ 
+                backgroundColor: userForm.role === 'member' ? '#e3f2fd' : '#fff3e0',
+                color: userForm.role === 'member' ? '#1976d2' : '#ed6c02',
+                fontWeight: 700,
+                fontSize: 20,
+                textAlign: 'center',
+                py: 3,
+                borderBottom: `3px solid ${userForm.role === 'member' ? '#1976d2' : '#ed6c02'}`
+              }}>
+                {editUser ? '✏️ Kullanıcı Güncelle' : (userForm.role === 'member' ? '👤 Yeni Üye Ekle' : '🏢 Yeni Yayınevi Ekle')}
+              </DialogTitle>
+              <DialogContent sx={{ p: 0, backgroundColor: '#fafafa' }}>
+                <Box sx={{ p: 4 }}>
+                  <Stack spacing={4}>
+                    {/* Başlık Bölümü */}
+                    <Box sx={{ 
+                      textAlign: 'center',
+                      p: 3,
+                      borderRadius: 4,
+                      background: userForm.role === 'member' 
+                        ? 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)'
+                        : 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)',
+                      border: `3px solid ${userForm.role === 'member' ? '#1976d2' : '#ed6c02'}`,
+                      boxShadow: '0 6px 20px rgba(0, 0, 0, 0.15)',
+                      position: 'relative',
+                      overflow: 'hidden'
+                    }}>
+                      <Box sx={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        height: '4px',
+                        background: `linear-gradient(90deg, ${userForm.role === 'member' ? '#1976d2' : '#ed6c02'} 0%, ${userForm.role === 'member' ? '#42a5f5' : '#ff9800'} 100%)`
+                      }} />
+                      <Typography variant="h5" sx={{ 
+                        color: userForm.role === 'member' ? '#1976d2' : '#ed6c02', 
+                        fontWeight: 800,
+                        fontSize: 22,
+                        textShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                        mb: 1
+                      }}>
+                        {userForm.role === 'member' ? '👤 Üye Bilgileri' : '🏢 Yayınevi Bilgileri'}
+                      </Typography>
+                      <Typography variant="body1" sx={{ 
+                        color: userForm.role === 'member' ? '#1565c0' : '#d84315',
+                        fontWeight: 500,
+                        opacity: 0.9
+                      }}>
+                        {userForm.role === 'member' ? 'Lütfen üye bilgilerini eksiksiz doldurun' : 'Lütfen yayınevi bilgilerini eksiksiz doldurun'}
+                      </Typography>
+                    </Box>
+
+                    {/* Form Alanları */}
+                    <Grid container spacing={3}>
+                    {userForm.role === 'member' ? (
+                      <>
+                        <Grid item xs={12} md={6}>
+                          <TextField 
+                            label="Ad" 
+                            value={userForm.firstName} 
+                            onChange={e => setUserForm(f => ({ ...f, firstName: e.target.value }))} 
+                            fullWidth 
+                            required 
+                            helperText="Üyenin adı"
+                            sx={{
+                              '& .MuiOutlinedInput-root': {
+                                borderRadius: 3,
+                                backgroundColor: '#ffffff',
+                                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
+                                transition: 'all 0.3s ease',
+                                '&:hover': {
+                                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                                  transform: 'translateY(-1px)'
+                                },
+                                '&:hover fieldset': {
+                                  borderColor: '#1976d2',
+                                  borderWidth: '2px'
+                                },
+                                '&.Mui-focused fieldset': {
+                                  borderColor: '#1976d2',
+                                  borderWidth: '2px'
+                                },
+                              },
+                              '& .MuiInputLabel-root': {
+                                fontWeight: 600,
+                                color: '#666'
+                              },
+                              '& .MuiInputLabel-root.Mui-focused': {
+                                color: '#1976d2',
+                                fontWeight: 700
+                              }
+                            }}
+                          />
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                          <TextField 
+                            label="Soyad" 
+                            value={userForm.lastName} 
+                            onChange={e => setUserForm(f => ({ ...f, lastName: e.target.value }))} 
+                            fullWidth 
+                            required
+                            helperText="Üyenin soyadı"
+                            sx={{
+                              '& .MuiOutlinedInput-root': {
+                                borderRadius: 3,
+                                backgroundColor: '#ffffff',
+                                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
+                                transition: 'all 0.3s ease',
+                                '&:hover': {
+                                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                                  transform: 'translateY(-1px)'
+                                },
+                                '&:hover fieldset': {
+                                  borderColor: '#1976d2',
+                                  borderWidth: '2px'
+                                },
+                                '&.Mui-focused fieldset': {
+                                  borderColor: '#1976d2',
+                                  borderWidth: '2px'
+                                },
+                              },
+                              '& .MuiInputLabel-root': {
+                                fontWeight: 600,
+                                color: '#666'
+                              },
+                              '& .MuiInputLabel-root.Mui-focused': {
+                                color: '#1976d2',
+                                fontWeight: 700
+                              }
+                            }}
+                          />
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                          <TextField 
+                            label="Doğum Tarihi" 
+                            type="date" 
+                            value={userForm.birthDate ? new Date(userForm.birthDate).toISOString().split('T')[0] : ''} 
+                            onChange={e => setUserForm(f => ({ ...f, birthDate: e.target.value }))} 
+                            fullWidth 
+                            required 
+                            InputLabelProps={{ shrink: true }}
+                            sx={{
+                              '& .MuiOutlinedInput-root': {
+                                borderRadius: 3,
+                                backgroundColor: '#ffffff',
+                                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
+                                transition: 'all 0.3s ease',
+                                '&:hover': {
+                                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                                  transform: 'translateY(-1px)'
+                                },
+                                '&:hover fieldset': {
+                                  borderColor: '#1976d2',
+                                  borderWidth: '2px'
+                                },
+                                '&.Mui-focused fieldset': {
+                                  borderColor: '#1976d2',
+                                  borderWidth: '2px'
+                                },
+                              },
+                              '& .MuiInputLabel-root': {
+                                fontWeight: 600,
+                                color: '#666'
+                              },
+                              '& .MuiInputLabel-root.Mui-focused': {
+                                color: '#1976d2',
+                                fontWeight: 700
+                              }
+                            }}
+                          />
+                        </Grid>
+                      </>
+                    ) : (
+                      <Grid item xs={12}>
+                        <TextField 
+                          label="Yetkili Kişi Adı" 
+                          value={`${userForm.firstName} ${userForm.lastName}`.trim()} 
+                          onChange={e => {
+                            const fullName = e.target.value;
+                            const nameParts = fullName.split(' ');
+                            const firstName = nameParts[0] || '';
+                            const lastName = nameParts.slice(1).join(' ') || '';
+                            setUserForm(f => ({ ...f, firstName, lastName }));
+                          }}
+                          fullWidth 
+                          required 
+                          helperText="Yayınevi yetkilisinin tam adı (Ad Soyad)"
+                          sx={{
+                            '& .MuiOutlinedInput-root': {
+                              borderRadius: 3,
+                              backgroundColor: '#ffffff',
+                              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
+                              transition: 'all 0.3s ease',
+                              '&:hover': {
+                                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                                transform: 'translateY(-1px)'
+                              },
+                              '&:hover fieldset': {
+                                borderColor: '#ed6c02',
+                                borderWidth: '2px'
+                              },
+                              '&.Mui-focused fieldset': {
+                                borderColor: '#ed6c02',
+                                borderWidth: '2px'
+                              },
+                            },
+                            '& .MuiInputLabel-root': {
+                              fontWeight: 600,
+                              color: '#666'
+                            },
+                            '& .MuiInputLabel-root.Mui-focused': {
+                              color: '#ed6c02',
+                              fontWeight: 700
+                            }
+                          }}
+                        />
+                      </Grid>
+                    )}
+                    <Grid item xs={12} md={6}>
+                      <TextField 
+                        label="Kullanıcı Adı" 
+                        value={userForm.username} 
+                        onChange={e => setUserForm(f => ({ ...f, username: e.target.value }))} 
+                        fullWidth 
+                        required 
+                        helperText={userForm.role === 'member' ? "Üye girişi için kullanıcı adı" : "Yayınevi girişi için kullanıcı adı"}
+                        sx={{
+                          '& .MuiOutlinedInput-root': {
+                            borderRadius: 3,
+                            backgroundColor: '#ffffff',
+                            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
+                            transition: 'all 0.3s ease',
+                            '&:hover': {
+                              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                              transform: 'translateY(-1px)'
+                            },
+                            '&:hover fieldset': {
+                              borderColor: userForm.role === 'member' ? '#1976d2' : '#ed6c02',
+                              borderWidth: '2px'
+                            },
+                            '&.Mui-focused fieldset': {
+                              borderColor: userForm.role === 'member' ? '#1976d2' : '#ed6c02',
+                              borderWidth: '2px'
+                            },
+                          },
+                          '& .MuiInputLabel-root': {
+                            fontWeight: 600,
+                            color: '#666'
+                          },
+                          '& .MuiInputLabel-root.Mui-focused': {
+                            color: userForm.role === 'member' ? '#1976d2' : '#ed6c02',
+                            fontWeight: 700
+                          }
+                        }}
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                      <TextField 
+                        label="E-posta" 
+                        value={userForm.email} 
+                        onChange={e => setUserForm(f => ({ ...f, email: e.target.value }))} 
+                        fullWidth 
+                        required 
+                        helperText={userForm.role === 'member' ? "Üye iletişim e-postası" : "Yayınevi iletişim e-postası"}
+                        sx={{
+                          '& .MuiOutlinedInput-root': {
+                            borderRadius: 3,
+                            backgroundColor: '#ffffff',
+                            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
+                            transition: 'all 0.3s ease',
+                            '&:hover': {
+                              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                              transform: 'translateY(-1px)'
+                            },
+                            '&:hover fieldset': {
+                              borderColor: userForm.role === 'member' ? '#1976d2' : '#ed6c02',
+                              borderWidth: '2px'
+                            },
+                            '&.Mui-focused fieldset': {
+                              borderColor: userForm.role === 'member' ? '#1976d2' : '#ed6c02',
+                              borderWidth: '2px'
+                            },
+                          },
+                          '& .MuiInputLabel-root': {
+                            fontWeight: 600,
+                            color: '#666'
+                          },
+                          '& .MuiInputLabel-root.Mui-focused': {
+                            color: userForm.role === 'member' ? '#1976d2' : '#ed6c02',
+                            fontWeight: 700
+                          }
+                        }}
+                      />
+                    </Grid>
+                    <Grid item xs={12}>
+                  <TextField
+                        label={userForm.role === 'member' ? "Adres" : "Yayınevi Adresi"} 
+                        value={userForm.address} 
+                        onChange={e => setUserForm(f => ({ ...f, address: e.target.value }))} 
+                    fullWidth
+                        required 
+                        multiline 
+                        rows={3}
+                        helperText={userForm.role === 'member' ? "Üyenin adresi" : "Yayınevinin resmi adresi"}
+                        sx={{
+                          '& .MuiOutlinedInput-root': {
+                            borderRadius: 3,
+                            backgroundColor: '#ffffff',
+                            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
+                            transition: 'all 0.3s ease',
+                            '&:hover': {
+                              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                              transform: 'translateY(-1px)'
+                            },
+                            '&:hover fieldset': {
+                              borderColor: userForm.role === 'member' ? '#1976d2' : '#ed6c02',
+                              borderWidth: '2px'
+                            },
+                            '&.Mui-focused fieldset': {
+                              borderColor: userForm.role === 'member' ? '#1976d2' : '#ed6c02',
+                              borderWidth: '2px'
+                            },
+                          },
+                          '& .MuiInputLabel-root': {
+                            fontWeight: 600,
+                            color: '#666'
+                          },
+                          '& .MuiInputLabel-root.Mui-focused': {
+                            color: userForm.role === 'member' ? '#1976d2' : '#ed6c02',
+                            fontWeight: 700
+                          }
+                        }}
+                      />
+                    </Grid>
+                    {userForm.role === 'publisher' && (
+                      <>
+                        <Grid item xs={12} md={6}>
+                          <TextField 
+                            label="Yayınevi Adı" 
+                            value={userForm.publisherName} 
+                            onChange={e => setUserForm(f => ({ ...f, publisherName: e.target.value }))} 
+                            fullWidth 
+                            required
+                            helperText="Yayınevinin resmi adı"
+                            sx={{
+                              '& .MuiOutlinedInput-root': {
+                                borderRadius: 3,
+                                backgroundColor: '#ffffff',
+                                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
+                                transition: 'all 0.3s ease',
+                                '&:hover': {
+                                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                                  transform: 'translateY(-1px)'
+                                },
+                                '&:hover fieldset': {
+                                  borderColor: '#ed6c02',
+                                  borderWidth: '2px'
+                                },
+                                '&.Mui-focused fieldset': {
+                                  borderColor: '#ed6c02',
+                                  borderWidth: '2px'
+                                },
+                              },
+                              '& .MuiInputLabel-root': {
+                                fontWeight: 600,
+                                color: '#666'
+                              },
+                              '& .MuiInputLabel-root.Mui-focused': {
+                                color: '#ed6c02',
+                                fontWeight: 700
+                              }
+                            }}
+                          />
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                          <TextField 
+                            label="Website" 
+                            value={userForm.website} 
+                            onChange={e => setUserForm(f => ({ ...f, website: e.target.value }))} 
+                            fullWidth 
+                            placeholder="https://www.example.com"
+                            helperText="Yayınevinin web sitesi (opsiyonel)"
+                            sx={{
+                              '& .MuiOutlinedInput-root': {
+                                borderRadius: 3,
+                                backgroundColor: '#ffffff',
+                                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
+                                transition: 'all 0.3s ease',
+                                '&:hover': {
+                                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                                  transform: 'translateY(-1px)'
+                                },
+                                '&:hover fieldset': {
+                                  borderColor: '#ed6c02',
+                                  borderWidth: '2px'
+                                },
+                                '&.Mui-focused fieldset': {
+                                  borderColor: '#ed6c02',
+                                  borderWidth: '2px'
+                                },
+                              },
+                              '& .MuiInputLabel-root': {
+                                fontWeight: 600,
+                                color: '#666'
+                              },
+                              '& .MuiInputLabel-root.Mui-focused': {
+                                color: '#ed6c02',
+                                fontWeight: 700
+                              }
+                            }}
+                          />
+                        </Grid>
+                    </>
+                  )}
+                    {editUser && (
+                      <Grid item xs={12}>
+                        <TextField 
+                          label="Yeni Şifre (Boş bırakılırsa değişmez)" 
+                          type="password" 
+                          value={userForm.password} 
+                          onChange={e => setUserForm(f => ({ ...f, password: e.target.value }))} 
+                          fullWidth 
+                          helperText="Şifreyi değiştirmek istemiyorsanız boş bırakın"
+                        />
+                      </Grid>
+                    )}
+                  </Grid>
+                </Stack>
+                </Box>
+              </DialogContent>
+              <DialogActions sx={{ p: 3, pt: 1, gap: 2 }}>
+                <Button 
+                  onClick={() => setOpenUserDialog(false)}
+                  variant="outlined"
+                  sx={{ 
+                    borderColor: '#666',
+                    color: '#666',
+                    borderRadius: 2,
+                    px: 3,
+                    py: 1.2,
+                    fontSize: 14,
+                    fontWeight: 500,
+                    textTransform: 'none',
+                    '&:hover': { 
+                      borderColor: '#333',
+                      backgroundColor: '#f5f5f5',
+                      transform: 'translateY(-1px)'
+                    },
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  ❌ İptal
+                </Button>
+                <Button 
+                  onClick={handleUserSave} 
+                  variant="contained"
+                  sx={{ 
+                    backgroundColor: userForm.role === 'member' ? '#1976d2' : '#ed6c02',
+                    borderRadius: 2,
+                    px: 4,
+                    py: 1.2,
+                    fontSize: 14,
+                    fontWeight: 600,
+                    textTransform: 'none',
+                    boxShadow: userForm.role === 'member' 
+                      ? '0 3px 8px rgba(25, 118, 210, 0.3)' 
+                      : '0 3px 8px rgba(237, 108, 2, 0.3)',
+                    '&:hover': { 
+                      backgroundColor: userForm.role === 'member' ? '#1565c0' : '#d84315',
+                      boxShadow: userForm.role === 'member' 
+                        ? '0 4px 12px rgba(25, 118, 210, 0.4)' 
+                        : '0 4px 12px rgba(237, 108, 2, 0.4)',
+                      transform: 'translateY(-1px)'
+                    },
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  {editUser ? '✅ Güncelle' : '💾 Kaydet'}
+                </Button>
+              </DialogActions>
+            </Dialog>
+          </>
+        )}
+        {/* Kategoriler Sekmesi */}
+        {tab === 2 && (
+          <>
+            {/* Kategori Arama Kutusu */}
+            <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 2, justifyContent: 'space-between' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexGrow: 1, maxWidth: 400 }}>
+                <TextField
+                  placeholder="Kategori ID veya adı ara..."
+                  value={searchTerm}
+                  onChange={(e) => handleSearch(e.target.value)}
+                  sx={{
+                    flexGrow: 1,
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: 3,
+                      backgroundColor: '#ffffff',
+                      boxShadow: 'none',
+                      border: '1px solid #e0e0e0',
+                      transition: 'all 0.3s ease',
+                      '&:hover': {
+                        backgroundColor: '#ffffff',
+                        border: '1px solid #d0d0d0',
+                        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)'
+                      },
+                      '&.Mui-focused': {
+                        backgroundColor: '#ffffff',
+                        border: '1px solid #1976d2',
+                        boxShadow: '0 1px 3px rgba(25, 118, 210, 0.1)'
+                      }
+                    },
+                    '& .MuiInputLabel-root': {
+                      fontWeight: 400,
+                      color: '#666'
+                    }
+                  }}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon sx={{ color: '#777' }} />
+                      </InputAdornment>
+                    ),
+                    endAdornment: searchTerm && (
+                      <InputAdornment position="end">
+                        <IconButton
+                          size="small"
+                          onClick={clearSearch}
+                          sx={{ color: '#777' }}
+                        >
+                          <ClearIcon />
+                        </IconButton>
+                      </InputAdornment>
+                    )
+                  }}
+                />
+                {searchTerm && (
+                  <Typography variant="body2" sx={{ color: '#666', fontWeight: 400, whiteSpace: 'nowrap' }}>
+                    {filteredCategories.length} kategori bulundu
+                  </Typography>
+                )}
+              </Box>
+              <Button 
+                variant="contained" 
+                startIcon={<AddIcon />} 
+                onClick={() => { setEditCategory(null); setCategoryForm({ name: '' }); setOpenCategoryDialog(true); }}
+                sx={{ 
+                  backgroundColor: '#1976d2',
+                  borderRadius: 3,
+                  px: 4,
+                  py: 1.5,
+                  fontSize: 16,
+                  fontWeight: 600,
+                  textTransform: 'none',
+                  boxShadow: '0 4px 12px rgba(25, 118, 210, 0.3)',
+                  '&:hover': { 
+                    backgroundColor: '#1565c0',
+                    boxShadow: '0 6px 16px rgba(25, 118, 210, 0.4)',
+                    transform: 'translateY(-2px)'
+                  },
+                  transition: 'all 0.3s ease'
+                }}
+              >
+                ➕ Kategori Ekle
+              </Button>
+            </Box>
+            <Paper sx={{ p: 3, mb: 3, borderRadius: 3, boxShadow: 3 }}>
+              <Typography variant="h6" gutterBottom sx={{ color: '#1976d2', fontWeight: 600, mb: 2 }}>
+                🏷️ Kategoriler ({filteredCategories.length})
+              </Typography>
+              <TableContainer component={Paper} sx={{ boxShadow: 1 }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
+                      <TableCell sx={{ fontWeight: 600 }}>ID</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Kategori Adı</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 600 }}>İşlemler</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {filteredCategories
+                      .slice(0, showMoreCategories ? filteredCategories.length : ITEMS_PER_PAGE)
+                      .map(category => (
+                      <TableRow key={category.id} sx={{ '&:hover': { backgroundColor: '#f8f9fa' } }}>
+                        <TableCell>{category.id}</TableCell>
+                        <TableCell>{category.name}</TableCell>
+                        <TableCell align="right">
+                          <IconButton color="info" onClick={() => handleCategoryEdit(category)} size="small"><EditIcon /></IconButton>
+                          <IconButton color="error" onClick={() => handleCategoryDelete(category.id)} size="small"><DeleteIcon /></IconButton>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              
+              {/* Daha Fazla Göster Butonu - Kategoriler */}
+              {filteredCategories.length > ITEMS_PER_PAGE && (
+                <Box sx={{ mt: 2, textAlign: 'center' }}>
+                  <Button
+                    variant="outlined"
+                    onClick={() => setShowMoreCategories(!showMoreCategories)}
+                    sx={{
+                      borderRadius: 3,
+                      px: 4,
+                      py: 1.5,
+                      fontWeight: 600,
+                      borderColor: '#1976d2',
+                      color: '#fff',
+                      backgroundColor: '#1976d2',
+                      '&:hover': {
+                        borderColor: '#1565c0',
+                        backgroundColor: '#1565c0',
+                        transform: 'translateY(-1px)',
+                        boxShadow: '0 4px 12px rgba(25, 118, 210, 0.15)'
+                      },
+                      transition: 'all 0.3s ease'
+                    }}
+                  >
+                    {showMoreCategories ? 'Daha Az Göster' : 'Daha Fazla Göster'}
+                  </Button>
+                </Box>
+              )}
+            </Paper>
+            {/* Kategori Ekle/Güncelle Dialog */}
+            <Dialog open={openCategoryDialog} onClose={() => setOpenCategoryDialog(false)} maxWidth="xs" fullWidth>
+              <DialogTitle sx={{ backgroundColor: '#e3f2fd', color: '#1976d2', fontWeight: 700, fontSize: 20, textAlign: 'center', py: 3, borderBottom: '3px solid #1976d2' }}>
+                {editCategory ? '✏️ Kategori Güncelle' : '➕ Yeni Kategori Ekle'}
+              </DialogTitle>
+              <DialogContent sx={{ p: 4, backgroundColor: '#fafafa' }}>
+                <Stack spacing={3}>
+                  <TextField
+                    label="Kategori Adı"
+                    value={categoryForm.name}
+                    onChange={e => setCategoryForm(f => ({ ...f, name: e.target.value }))}
+                    fullWidth
+                    required
+                  />
+
+                </Stack>
+              </DialogContent>
+              <DialogActions sx={{ p: 3, pt: 1, gap: 2 }}>
+                <Button onClick={() => setOpenCategoryDialog(false)} variant="outlined">İptal</Button>
+                <Button onClick={handleCategorySave} variant="contained" sx={{ backgroundColor: '#1976d2' }}>{editCategory ? 'Güncelle' : 'Kaydet'}</Button>
+              </DialogActions>
+            </Dialog>
+          </>
+        )}
+        {/* Ödünç Talepleri Sekmesi */}
+        {tab === 3 && (
+          <>
+            {/* Ödünç Talepleri Arama Kutusu */}
+            <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 2, justifyContent: 'space-between' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexGrow: 1, maxWidth: 400 }}>
+                <TextField
+                  placeholder="Kitap, kullanıcı veya durum ara..."
+                  value={searchTerm}
+                  onChange={(e) => handleSearch(e.target.value)}
+                  sx={{
+                    flexGrow: 1,
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: 3,
+                      backgroundColor: '#ffffff',
+                      boxShadow: 'none',
+                      border: '1px solid #e0e0e0',
+                      transition: 'all 0.3s ease',
+                      '&:hover': {
+                        backgroundColor: '#ffffff',
+                        border: '1px solid #d0d0d0',
+                        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)'
+                      },
+                      '&.Mui-focused': {
+                        backgroundColor: '#ffffff',
+                        border: '1px solid #9c27b0',
+                        boxShadow: '0 1px 3px rgba(156, 39, 176, 0.1)'
+                      }
+                    },
+                    '& .MuiInputLabel-root': {
+                      fontWeight: 400,
+                      color: '#666'
+                    }
+                  }}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon sx={{ color: '#777' }} />
+                      </InputAdornment>
+                    ),
+                    endAdornment: searchTerm && (
+                      <InputAdornment position="end">
+                        <IconButton
+                          size="small"
+                          onClick={clearSearch}
+                          sx={{ color: '#777' }}
+                        >
+                          <ClearIcon />
+                        </IconButton>
+                      </InputAdornment>
+                    )
+                  }}
+                />
+                {searchTerm && (
+                  <Typography variant="body2" sx={{ color: '#666', fontWeight: 400, whiteSpace: 'nowrap' }}>
+                    {filteredBorrowRequests.length} talep bulundu
+                  </Typography>
+                )}
+              </Box>
+            </Box>
+            
+            {/* Ödünç Talepleri Tablosu */}
+            <Paper sx={{ p: 3, mb: 3, borderRadius: 3, boxShadow: 3 }}>
+              <Typography variant="h6" gutterBottom sx={{ color: '#9c27b0', fontWeight: 600, mb: 2 }}>
+                📚 Ödünç Talepleri ({filteredBorrowRequests.length})
+              </Typography>
+              <TableContainer component={Paper} sx={{ boxShadow: 1 }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow sx={{ backgroundColor: '#f3e5f5' }}>
+                      <TableCell sx={{ fontWeight: 600 }}>Kitap</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Kullanıcı</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Yayınevi</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Talep Tarihi</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Ödünç Tarihleri</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Durum</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Notlar</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 600 }}>İşlemler</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {filteredBorrowRequests
+                      .slice(0, showMoreBorrowRequests ? filteredBorrowRequests.length : ITEMS_PER_PAGE)
+                      .map(request => (
+                      <TableRow key={request.id} sx={{ '&:hover': { backgroundColor: '#faf5ff' } }}>
+                        <TableCell>
+                          <Box>
+                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#333' }}>
+                              {request.bookTitle}
+                            </Typography>
+                            <Typography variant="caption" sx={{ color: '#666' }}>
+                              {request.bookAuthor}
+                            </Typography>
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Box>
+                            <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                              {request.userName}
+                            </Typography>
+                            <Typography variant="caption" sx={{ color: '#666' }}>
+                              {request.userEmail}
+                            </Typography>
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                            {request.publisherName || '-'}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2">
+                            {formatDate(request.requestDate)}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                            {request.borrowStartDate && (
+                              <Typography variant="caption" sx={{ color: '#666' }}>
+                                <strong>Alış:</strong> {formatDate(request.borrowStartDate)}
+                              </Typography>
+                            )}
+                            {request.borrowEndDate && (
+                              <Typography variant="caption" sx={{ color: '#666' }}>
+                                <strong>İade:</strong> {formatDate(request.borrowEndDate)}
+                              </Typography>
+                            )}
+                            {!request.borrowStartDate && !request.borrowEndDate && (
+                              <Typography variant="caption" sx={{ color: '#999' }}>
+                                Tarih belirtilmemiş
+                              </Typography>
+                            )}
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Chip 
+                            label={
+                              request.status === 'Pending' ? 'Beklemede' :
+                              request.status === 'Approved' ? 'Onaylandı' :
+                              request.status === 'Rejected' ? 'Reddedildi' :
+                              request.status === 'Returned' ? 'İade Edildi' : request.status
+                            }
+                            color={
+                              request.status === 'Pending' ? 'warning' :
+                              request.status === 'Approved' ? 'success' :
+                              request.status === 'Rejected' ? 'error' :
+                              request.status === 'Returned' ? 'info' : 'default'
+                            }
+                            size="small"
+                            sx={{ fontWeight: 600 }}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" sx={{ 
+                            color: '#666', 
+                            maxWidth: 150, 
+                            overflow: 'hidden', 
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            {request.notes || '-'}
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="right">
+                          {request.status === 'Pending' && (
+                            <Box sx={{ display: 'flex', gap: 1 }}>
+                              <Button
+                                variant="contained"
+                                size="small"
+                                color="success"
+                                onClick={() => handleApproveRequest(request.id)}
+                                sx={{ 
+                                  minWidth: 'auto', 
+                                  px: 1.5, 
+                                  py: 0.5,
+                                  fontSize: '0.75rem',
+                                  fontWeight: 600
+                                }}
+                              >
+                                Onayla
+                              </Button>
+                              <Button
+                                variant="contained"
+                                size="small"
+                                color="error"
+                                onClick={() => handleRejectRequest(request.id)}
+                                sx={{ 
+                                  minWidth: 'auto', 
+                                  px: 1.5, 
+                                  py: 0.5,
+                                  fontSize: '0.75rem',
+                                  fontWeight: 600
+                                }}
+                              >
+                                Reddet
+                              </Button>
+                            </Box>
+                          )}
+                          {request.status !== 'Pending' && (
+                            <Typography variant="caption" sx={{ color: '#999', fontStyle: 'italic' }}>
+                              İşlem tamamlandı
+                            </Typography>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              
+              {/* Daha Fazla Göster Butonu - Ödünç Talepleri */}
+              {filteredBorrowRequests.length > ITEMS_PER_PAGE && (
+                <Box sx={{ mt: 2, textAlign: 'center' }}>
+                  <Button
+                    variant="outlined"
+                    onClick={() => setShowMoreBorrowRequests(!showMoreBorrowRequests)}
+                    sx={{
+                      borderRadius: 3,
+                      px: 4,
+                      py: 1.5,
+                      fontWeight: 600,
+                      borderColor: '#9c27b0',
+                      color: '#fff',
+                      backgroundColor: '#9c27b0',
+                      '&:hover': {
+                        borderColor: '#7b1fa2',
+                        backgroundColor: '#7b1fa2',
+                        transform: 'translateY(-1px)',
+                        boxShadow: '0 4px 12px rgba(156, 39, 176, 0.15)'
+                      },
+                      transition: 'all 0.3s ease'
+                    }}
+                  >
+                    {showMoreBorrowRequests ? 'Daha Az Göster' : 'Daha Fazla Göster'}
+                  </Button>
+                </Box>
+              )}
+            </Paper>
+          </>
+        )}
+        )}
+      </Paper>
+
+      {/* Snackbar - Bildirimler */}
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={4000}
+        onClose={() => setSnackbarOpen(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setSnackbarOpen(false)}
+          severity={snackbarSeverity}
+          sx={{
+            width: '100%',
+            borderRadius: 2,
+            fontWeight: 600,
+            '& .MuiAlert-icon': {
+              fontSize: '1.2rem'
+            }
+          }}
+        >
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
+    </Box>
+  );
+};
+
+export default AdminPanel; 
