@@ -21,7 +21,7 @@ It provides a backend service for a **Library Management System**, enabling user
 
 - **.NET 8 Web API**  
 - **Entity Framework Core** (Code-First, Migrations)  
-- **SQL Server**  
+- **SQLite**  
 - **JWT Authentication**  
 - **Swagger (OpenAPI)** for API documentation  
 - **C# 12**  
@@ -65,7 +65,9 @@ It provides a backend service for a **Library Management System**, enabling user
 
 ### 🏷️ Categories
 - `GET /api/categories` → List categories  
-- `POST /api/categories` → Create category  
+- `POST /api/categories` → Create category
+- `PUT /api/categories` → Update category
+- `DELETE /api/categories` → Delete category  
 
 ### ⭐ Favorites
 - `POST /api/favorites/{bookId}` → Add book to favorites  
